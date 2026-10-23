@@ -1,0 +1,31 @@
+{% extends 'loginRegister/base.html' %}
+
+{% block title %}Registro{% endblock %}
+
+{% block content %}
+<h1>Crear cuenta</h1>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+
+    <label for="id_nombre">Nombre</label>
+    <input type="text" name="nombre" id="id_nombre" value="{{ form.nombre.value|default:'' }}">
+    {{ form.nombre.errors }}
+
+    <label for="id_email">Correo electrónico</label>
+    <input type="email" name="email" id="id_email" value="{{ form.email.value|default:'' }}">
+    {{ form.email.errors }}
+
+    <label for="id_password">Contraseña</label>
+    <input type="password" name="password" id="id_password">
+    {{ form.password.errors }}
+
+    <label for="id_password2">Confirmar contraseña</label>
+    <input type="password" name="password2" id="id_password2">
+    {{ form.password2.errors }}
+
+    <button type="submit">Registrarme</button>
+</form>
+
+<p class="link">¿Ya tienes cuenta? <a href="{% url 'login' %}">Inicia sesión</a></p>
+{% endblock %}
