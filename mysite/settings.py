@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-un!ci^93&)_oqz6n($5x3q45qxo7px%&3m%+1chx*pp$zjpj_f
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -38,11 +38,14 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'loginRegister',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -75,8 +78,16 @@ WSGI_APPLICATION = 'mysite.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'postgres',
+        'USER': 'mamb',
+        'PASSWORD': 'Dama1021.',
+        'HOST': 'pruebas.cde0is0wquge.us-east-2.rds.amazonaws.com',
+        'PORT': '5432',
+        'OPTIONS': {
+            'sslmode': 'verify-full',
+            'sslrootcert': str(BASE_DIR / 'global-bundle.pem'),
+        },
     }
 }
 
@@ -116,6 +127,15 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 
 # Email
@@ -130,3 +150,8 @@ MAILERS = {
 
 LOGIN_URL = 'login'            # a dónde manda a quien no está autenticado (CA-02.6)
 LOGIN_REDIRECT_URL = 'home'    # a dónde va tras iniciar sesión (CA-02.5)
+
+
+# CORS configuration
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True

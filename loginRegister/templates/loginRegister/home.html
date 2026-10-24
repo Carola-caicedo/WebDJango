@@ -1,14 +1,13 @@
-<!DOCTYPE html>
-<html lang="es">
+{% extends 'loginRegister/base.html' %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inicio</title>
-</head>
+{% block title %}Inicio{% endblock %}
 
-<body>
-    <h1>Bienvenido a la pagina privada de inicio</h1>
-</body>
-
-</html>
+{% block content %}
+<h1>Bienvenido a la página privada de inicio</h1>
+<p style="text-align: center; color: #555;">
+    Has iniciado sesión como: <strong>{{ request.user.first_name|default:request.user.email }}</strong>
+</p>
+<p class="link">
+    <a href="{% url 'login' %}">Volver al login</a>
+</p>
+{% endblock %}
