@@ -159,6 +159,7 @@ MAILERS = {
     },
 }
 
+PASSWORD_RESET_TIMEOUT = 1800  # 30 minutos (CA-03.4)
 
 LOGIN_URL = 'login'            # a dónde manda a quien no está autenticado (CA-02.6)
 LOGIN_REDIRECT_URL = 'home'    # a dónde va tras iniciar sesión (CA-02.5)

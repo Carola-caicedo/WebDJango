@@ -73,3 +73,51 @@ class LoginForm(forms.Form):
         widget=forms.PasswordInput,
         error_messages={'required': 'La contraseña es obligatoria.'},
     )
+
+
+class PasswordResetRequestForm(forms.Form):
+    email = forms.EmailField(
+        error_messages={
+            'required': 'El correo es obligatorio.',
+            'invalid': 'Ingresa un correo con formato válido.',
+        },
+    )
+
+    def clean_email(self):
+        return self.cleaned_data['email'].strip().lower()
+
+
+class SetPasswordForm(forms.Form):
+    password = forms.CharField(
+        widget=forms.PasswordInput,
+        error_messages={'required': 'La contraseña es obligatoria.'},
+    )
+    password2 = forms.CharField(
+        widget=forms.PasswordInput,
+        error_messages={'required': 'Debes confirmar la contraseña.'},
+    )
+
+    def clean_password(self):
+        pwd = self.cleaned_data['password']
+        errores = []
+        if len(pwd) < 8:
+            errores.append('al menos 8 caracteres')
+        if not re.search(r'[A-Z]', pwd):
+            errores.append('una mayúscula')
+        if not re.search(r'[a-z]', pwd):
+            errores.append('una minúscula')
+        if not re.search(r'\d', pwd):
+            errores.append('un número')
+        if errores:
+            raise forms.ValidationError(
+                'La contraseña debe tener ' + ', '.join(errores) + '.'
+            )
+        return pwd
+
+    def clean(self):
+        cleaned = super().clean()
+        p1 = cleaned.get('password')
+        p2 = cleaned.get('password2')
+        if p1 and p2 and p1 != p2:
+            self.add_error('password2', 'Las contraseñas no coinciden.')
+        return cleaned
