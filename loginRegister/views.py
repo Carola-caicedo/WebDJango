@@ -2,10 +2,11 @@ from django.shortcuts import render
 
 # Create your views here.
 from django.contrib import messages
-from django.contrib.auth import authenticate, login, get_user_model
+from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.cache import never_cache
 
 from .forms import RegisterForm, LoginForm
 
@@ -61,6 +62,12 @@ def login_view(request):
     return render(request, 'loginRegister/login.html', {'form': form})
 
 
+def logout_view(request):
+    logout(request)
+    return redirect('login')
+
+
+@never_cache
 @login_required  # CA-02.6: sin sesión, redirige al login
 def home_view(request):
     return render(request, 'loginRegister/home.html')

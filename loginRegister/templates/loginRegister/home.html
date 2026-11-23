@@ -7,7 +7,9 @@
 <p style="text-align: center; color: #555;">
     Has iniciado sesión como: <strong>{{ request.user.first_name|default:request.user.email }}</strong>
 </p>
-<p class="link">
-    <a href="{% url 'login' %}">Volver al login</a>
-</p>
+
+<form method="post" action="{% url 'logout' %}">
+    {% csrf_token %}
+    <button type="submit">Cerrar sesión</button>
+</form>
 {% endblock %}
