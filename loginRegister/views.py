@@ -1,6 +1,7 @@
 from django.shortcuts import render
 
 # Create your views here.
+from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.contrib.auth.decorators import login_required
@@ -8,13 +9,22 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.shortcuts import render, redirect
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import url_has_allowed_host_and_scheme, urlsafe_base64_encode, urlsafe_base64_decode
 from django.views.decorators.cache import never_cache
 
 from .forms import RegisterForm, LoginForm, PasswordResetRequestForm, SetPasswordForm
+from .models import LoginAttempt
 
 User = get_user_model()
+
+
+def get_client_ip(request):
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        return x_forwarded_for.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR', '')
 
 
 def register_view(request):
@@ -47,19 +57,61 @@ def login_view(request):
     if request.method == 'POST':
         form = LoginForm(request.POST)
         if form.is_valid():
+            email = form.cleaned_data['email'].strip().lower()
+            password = form.cleaned_data['password']
+            ip = get_client_ip(request)
+            now = timezone.now()
+
+            # CA-05.1, CA-05.2: verificar bloqueo por intentos fallidos
+            attempt = LoginAttempt.objects.filter(email=email, ip_address=ip).first()
+            if attempt and attempt.blocked_until:
+                if attempt.blocked_until > now:
+                    messages.error(
+                        request,
+                        'Demasiados intentos fallidos. Tu cuenta está temporalmente bloqueada. Intenta de nuevo más tarde.'
+                    )
+                    return render(request, 'loginRegister/login.html', {'form': form})
+                else:
+                    # El período de bloqueo expiró (CA-05.4)
+                    attempt.failed_attempts = 0
+                    attempt.blocked_until = None
+                    attempt.save()
+
             user = authenticate(
                 request,
-                username=form.cleaned_data['email'].strip().lower(),
-                password=form.cleaned_data['password'],
+                username=email,
+                password=password,
             )
             if user is not None:
+                # CA-05.5: login exitoso reinicia el contador
+                if attempt:
+                    attempt.delete()
                 login(request, user)
                 next_url = request.GET.get('next')
                 if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
                     return redirect(next_url)
                 return redirect('home')
-            # Mensaje genérico: no revela si falló el correo o la contraseña (CA-02.3)
-            messages.error(request, 'Correo o contraseña incorrectos.')
+
+            # CA-05.1, CA-05.2: registrar intento fallido
+            if not attempt:
+                attempt = LoginAttempt(email=email, ip_address=ip, failed_attempts=1)
+            else:
+                if now - attempt.last_attempt > timedelta(minutes=15):
+                    attempt.failed_attempts = 1
+                else:
+                    attempt.failed_attempts += 1
+
+            if attempt.failed_attempts >= 5:
+                attempt.blocked_until = now + timedelta(minutes=15)
+                attempt.save()
+                messages.error(
+                    request,
+                    'Demasiados intentos fallidos. Tu cuenta está temporalmente bloqueada. Intenta de nuevo más tarde.'
+                )
+            else:
+                attempt.save()
+                # Mensaje genérico: no revela si falló el correo o la contraseña (CA-02.3)
+                messages.error(request, 'Correo o contraseña incorrectos.')
     else:
         form = LoginForm()
 

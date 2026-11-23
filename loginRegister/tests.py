@@ -1,3 +1,4 @@
+from datetime import timedelta
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.contrib.auth import get_user_model, authenticate
@@ -5,8 +6,11 @@ from django.contrib.auth.tokens import default_token_generator
 from django.contrib.messages import get_messages
 from django.core import mail
 from django.conf import settings
+from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
+
+from .models import LoginAttempt
 
 User = get_user_model()
 
@@ -178,5 +182,106 @@ class PasswordResetTests(TestCase):
 
         user_new = authenticate(username='carlos@example.com', password='NewPassword123')
         self.assertIsNotNone(user_new)
+
+
+class RateLimitLoginTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(
+            username='bloqueo@example.com',
+            email='bloqueo@example.com',
+            first_name='Carlos',
+            password='Password123',
+        )
+        self.login_url = reverse('login')
+        self.ip = '192.168.1.10'
+
+    def _login_fallido(self, ip='192.168.1.10', email='bloqueo@example.com'):
+        return self.client.post(
+            self.login_url,
+            {'email': email, 'password': 'WrongPassword'},
+            REMOTE_ADDR=ip,
+        )
+
+    def test_ca_05_1_y_ca_05_2_bloqueo_al_quinto_intento_fallido(self):
+        # Primeros 4 intentos fallidos: error de credenciales
+        for _ in range(4):
+            res = self._login_fallido()
+            self.assertEqual(res.status_code, 200)
+            msgs = [str(m) for m in get_messages(res.wsgi_request)]
+            self.assertTrue(any('Correo o contraseña incorrectos' in m for m in msgs))
+
+        # Intento 5: activa el bloqueo
+        res5 = self._login_fallido()
+        self.assertEqual(res5.status_code, 200)
+        msgs5 = [str(m) for m in get_messages(res5.wsgi_request)]
+        self.assertTrue(any('temporalmente bloqueada' in m for m in msgs5))
+
+        # Registro en BD
+        attempt = LoginAttempt.objects.get(email='bloqueo@example.com', ip_address=self.ip)
+        self.assertEqual(attempt.failed_attempts, 5)
+        self.assertIsNotNone(attempt.blocked_until)
+        self.assertGreater(attempt.blocked_until, timezone.now())
+
+        # Intento 6 (incluso con contraseña correcta): permanece bloqueado
+        res6 = self.client.post(
+            self.login_url,
+            {'email': 'bloqueo@example.com', 'password': 'Password123'},
+            REMOTE_ADDR=self.ip,
+        )
+        self.assertEqual(res6.status_code, 200)
+        msgs6 = [str(m) for m in get_messages(res6.wsgi_request)]
+        self.assertTrue(any('temporalmente bloqueada' in m for m in msgs6))
+
+    def test_ca_05_1_combinacion_cuenta_e_ip_independientes(self):
+        # 5 intentos fallidos desde IP 1
+        for _ in range(5):
+            self._login_fallido(ip='192.168.1.10')
+
+        # Desde otra IP, el usuario aún puede intentar autenticarse con éxito
+        res_otra_ip = self.client.post(
+            self.login_url,
+            {'email': 'bloqueo@example.com', 'password': 'Password123'},
+            REMOTE_ADDR='192.168.1.20',
+        )
+        self.assertRedirects(res_otra_ip, reverse('home'))
+
+    def test_ca_05_4_desbloqueo_despues_de_15_minutos(self):
+        # Simular registro con bloqueo expirado (hace más de 15 minutos)
+        LoginAttempt.objects.create(
+            email='bloqueo@example.com',
+            ip_address=self.ip,
+            failed_attempts=5,
+            blocked_until=timezone.now() - timedelta(minutes=1),
+        )
+
+        # Puede volver a intentar con credenciales correctas
+        res = self.client.post(
+            self.login_url,
+            {'email': 'bloqueo@example.com', 'password': 'Password123'},
+            REMOTE_ADDR=self.ip,
+        )
+        self.assertRedirects(res, reverse('home'))
+
+    def test_ca_05_5_login_exitoso_reinicia_contador(self):
+        # 3 intentos fallidos
+        for _ in range(3):
+            self._login_fallido()
+
+        attempt = LoginAttempt.objects.get(email='bloqueo@example.com', ip_address=self.ip)
+        self.assertEqual(attempt.failed_attempts, 3)
+
+        # Login exitoso
+        res = self.client.post(
+            self.login_url,
+            {'email': 'bloqueo@example.com', 'password': 'Password123'},
+            REMOTE_ADDR=self.ip,
+        )
+        self.assertRedirects(res, reverse('home'))
+
+        # Contador reiniciado (registro eliminado o puesto en 0)
+        self.assertFalse(
+            LoginAttempt.objects.filter(email='bloqueo@example.com', ip_address=self.ip).exists()
+        )
 
 
